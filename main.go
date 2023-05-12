@@ -3,11 +3,13 @@ package main
 import (
 	"config/models"
 	"config/routers"
+	"config/utilities"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog/pkgerrors"
@@ -36,7 +38,10 @@ func main() {
 		log.Error().Err(err).Msg("Error connecting to database")
 	}
 
-	routers.RegisterProducts(r.Group("/products"), db)
+	redis := redis.NewClient(&redis.Options{Addr: os.Getenv("REDIS_ADDRESS"), Password: "", DB: 0}) //default DB
+	permissionsHelper := utilities.NewPermissionHelper(os.Getenv("AUTH_SERVICE_ENDPOINT"), os.Getenv("AUTH_SERVICE_USER_ID"), os.Getenv("AUTH_SERVICE_PASSWORD"), redis)
+
+	routers.RegisterProducts(r.Group("/products"), db, permissionsHelper)
 
 	r.Run(fmt.Sprintf(":%s", os.Getenv("PORT")))
 }
