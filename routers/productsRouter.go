@@ -2,15 +2,37 @@ package routers
 
 import (
 	"config/models"
+	"config/utilities"
 	"net/http"
+	"regexp"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
-func RegisterProducts(products *gin.RouterGroup, db *gorm.DB) {
+func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper *utilities.PermissionsHelper) {
 	products.GET("/:productCode", func(c *gin.Context) {
+		authHeader := c.Request.Header.Get("Authorization")
+		log.Info().Msgf("Auth header is %s", authHeader)
+		bearerPattern := regexp.MustCompile("(?i)^bearer (.*)$")
+		tokens := bearerPattern.FindStringSubmatch(authHeader)
+		if len(tokens) != 2 {
+			log.Warn().Msg("Unauthenticated attempt to retrieve config data")
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		isAllowed, err := permissionsHelper.IsAuthorized(tokens[1], "View a Product")
+		if err != nil {
+			log.Error().Err(err).Msg("Error checking permissions")
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		if !isAllowed {
+			log.Warn().Msgf("Failed permission check")
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
 		var product models.Product
 		result := db.First(&product, "product_code=?", c.Param("productCode"))
 		if result.Error != nil {
