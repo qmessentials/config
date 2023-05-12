@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-redis/redis"
 	"github.com/rs/zerolog/log"
 )
 
@@ -17,53 +16,54 @@ type PermissionsHelper struct {
 	authServiceEndpoint string
 	authServiceUserId   string
 	authServicePassword string
-	redisClient         *redis.Client
+	cacheService        *CacheService
 }
 
-func NewPermissionHelper(authServiceEndpoint string, authServiceUserId string, authServicePassword string, redisClient *redis.Client) *PermissionsHelper {
+func NewPermissionHelper(authServiceEndpoint string, authServiceUserId string, authServicePassword string,
+	cacheService *CacheService) *PermissionsHelper {
 	return &PermissionsHelper{
 		authServiceEndpoint,
 		authServiceUserId,
 		authServicePassword,
-		redisClient,
+		cacheService,
 	}
 }
 
 func (ph *PermissionsHelper) getAuthToken() (string, error) {
-	authTokenCacheResult, err := ph.redisClient.Get("authToken").Result()
-	if err == redis.Nil || len(authTokenCacheResult) == 0 {
-		log.Warn().Msg("Cache miss for auth token")
-		request := struct {
-			UserId   string `json:"userId"`
-			Password string `json:"password"`
-		}{ph.authServiceUserId, ph.authServicePassword}
-		requestJSON, err := json.Marshal(request)
-		if err != nil {
-			return "", err
-		}
-		resp, err := http.Post(ph.authServiceEndpoint+"/public/logins", "application/json", bytes.NewBuffer(requestJSON))
-		if err != nil {
-			return "", err
-		}
-		respBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-		if len(respBytes) == 0 {
-			return "", errors.New("auth service returned zero-length token")
-		}
-		var result *models.User
-		err = json.Unmarshal(respBytes, &result)
-		if err != nil {
-			return "", err
-		}
-		ph.redisClient.Set("authToken", result.AuthToken, 0)
-		return result.AuthToken, nil
-	}
+	cacheHit, authToken, err := ph.cacheService.Get("authToken")
 	if err != nil {
 		return "", err
 	}
-	return authTokenCacheResult, nil
+	if cacheHit {
+		return authToken, nil
+	}
+	log.Warn().Msg("Cache miss for auth token")
+	request := struct {
+		UserId   string `json:"userId"`
+		Password string `json:"password"`
+	}{ph.authServiceUserId, ph.authServicePassword}
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.Post(ph.authServiceEndpoint+"/public/logins", "application/json", bytes.NewBuffer(requestJSON))
+	if err != nil {
+		return "", err
+	}
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if len(respBytes) == 0 {
+		return "", errors.New("auth service returned zero-length token")
+	}
+	var result *models.User
+	err = json.Unmarshal(respBytes, &result)
+	if err != nil {
+		return "", err
+	}
+	ph.cacheService.Set("authToken", result.AuthToken)
+	return result.AuthToken, nil
 }
 
 func (ph *PermissionsHelper) IsAuthorized(bearerToken string, permission string) (bool, error) {
