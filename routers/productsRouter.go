@@ -11,26 +11,35 @@ import (
 	"gorm.io/gorm"
 )
 
+func checkPermissions(c *gin.Context, permission string, permissionsHelper *utilities.PermissionsHelper) int {
+	authHeader := c.Request.Header.Get("Authorization")
+	log.Info().Msgf("Auth header is %s", authHeader)
+	bearerPattern := regexp.MustCompile("(?i)^bearer (.*)$")
+	tokens := bearerPattern.FindStringSubmatch(authHeader)
+	if len(tokens) != 2 {
+		log.Warn().Msg("Unauthenticated attempt to retrieve config data")
+		return http.StatusUnauthorized
+	}
+	isAllowed, err := permissionsHelper.IsAuthorized(tokens[1], permission)
+	if err != nil {
+		if err.Error() == "authentication failure" {
+			return http.StatusUnauthorized
+		}
+		log.Error().Err(err).Msg("Error checking permissions")
+		return http.StatusInternalServerError
+	}
+	if !isAllowed {
+		log.Warn().Msgf("Failed permission check")
+		return http.StatusForbidden
+	}
+	return http.StatusOK
+}
+
 func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper *utilities.PermissionsHelper) {
 	products.GET("/:productCode", func(c *gin.Context) {
-		authHeader := c.Request.Header.Get("Authorization")
-		log.Info().Msgf("Auth header is %s", authHeader)
-		bearerPattern := regexp.MustCompile("(?i)^bearer (.*)$")
-		tokens := bearerPattern.FindStringSubmatch(authHeader)
-		if len(tokens) != 2 {
-			log.Warn().Msg("Unauthenticated attempt to retrieve config data")
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		isAllowed, err := permissionsHelper.IsAuthorized(tokens[1], "View a Product")
-		if err != nil {
-			log.Error().Err(err).Msg("Error checking permissions")
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		if !isAllowed {
-			log.Warn().Msgf("Failed permission check")
-			c.AbortWithStatus(http.StatusForbidden)
+		permissionsResult := checkPermissions(c, "product-view", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
 			return
 		}
 		var product models.Product
@@ -47,6 +56,11 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		c.JSON(http.StatusOK, product)
 	})
 	products.GET("/", func(c *gin.Context) {
+		permissionsResult := checkPermissions(c, "product-search", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
+			return
+		}
 		var products []models.Product
 		result := db.Find(&products)
 		if result.Error != nil {
@@ -57,6 +71,11 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		c.JSON(http.StatusOK, products)
 	})
 	products.POST("/", func(c *gin.Context) {
+		permissionsResult := checkPermissions(c, "product-create", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
+			return
+		}
 		var product models.Product
 		err := c.BindJSON(&product)
 		if err != nil {
@@ -77,6 +96,11 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		c.Status(http.StatusCreated)
 	})
 	products.PUT("/:productCode", func(c *gin.Context) {
+		permissionsResult := checkPermissions(c, "product-edit", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
+			return
+		}
 		var product models.Product
 		err := c.BindJSON(&product)
 		if err != nil {
@@ -101,6 +125,11 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		c.Status(http.StatusOK)
 	})
 	products.DELETE("/:productCode", func(c *gin.Context) {
+		permissionsResult := checkPermissions(c, "product-remove", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
+			return
+		}
 		result := db.Where("product_code", c.Param("productCode")).Delete(&models.Product{})
 		if result.Error != nil {
 			log.Error().Err(result.Error).Msgf("Error deleting product %s", c.Param("productCode"))
