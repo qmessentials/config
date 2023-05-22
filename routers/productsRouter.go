@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
+
 func checkPermissions(c *gin.Context, permission string, permissionsHelper *utilities.PermissionsHelper) int {
 	authHeader := c.Request.Header.Get("Authorization")
 	log.Info().Msgf("Auth header is %s", authHeader)
