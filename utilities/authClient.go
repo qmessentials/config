@@ -12,52 +12,14 @@ import (
 
 type AuthClient struct {
 	authServiceEndpoint string
-	authServiceUserId   string
-	authServicePassword string
 }
 
-func NewAuthClient(authServiceEndpoint string, authServiceUserId string, authServicePassword string) *AuthClient {
-	return &AuthClient{authServiceEndpoint, authServiceUserId, authServicePassword}
+func NewAuthClient(authServiceEndpoint string) *AuthClient {
+	return &AuthClient{authServiceEndpoint}
 }
 
-func (ac *AuthClient) getAuthToken() (string, error) {
-	request := struct {
-		UserId   string `json:"userId"`
-		Password string `json:"password"`
-	}{ac.authServiceUserId, ac.authServicePassword}
-	requestJSON, err := json.Marshal(request)
-	if err != nil {
-		return "", err
-	}
-	resp, err := http.Post(ac.authServiceEndpoint+"/public/logins", "application/json", bytes.NewBuffer(requestJSON))
-	if err != nil {
-		return "", err
-	}
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if len(respBytes) == 0 {
-		return "", errors.New("auth service returned zero-length token")
-	}
-	var result *models.User
-	err = json.Unmarshal(respBytes, &result)
-	if err != nil {
-		return "", err
-	}
-	return result.AuthToken, nil
-}
-
-func (ac *AuthClient) IsAuthorized(subjectToken string, permission string, applicationToken string) (bool, error) {
-	requestStruct := struct {
-		BearerToken string `json:"bearerToken"`
-		Permission  string `json:"permission"`
-	}{subjectToken, permission}
-	requestJSON, err := json.Marshal(requestStruct)
-	if err != nil {
-		return false, err
-	}
-	req, err := http.NewRequest(http.MethodPost, ac.authServiceEndpoint+"/secure/authz-checks", bytes.NewBuffer(requestJSON))
+func (ac *AuthClient) IsAuthorized(subjectToken string, permission string) (bool, error) {
+	req, err := http.NewRequest(http.MethodGet, ac.authServiceEndpoint+"/secure/authz-checks/"+permission, nil)
 	if err != nil {
 		return false, err
 	}
@@ -69,7 +31,7 @@ func (ac *AuthClient) IsAuthorized(subjectToken string, permission string, appli
 		}
 		return err
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", applicationToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", subjectToken))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 	resp, err := client.Do(req)

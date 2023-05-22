@@ -24,3 +24,7 @@ func (cs *CacheService) Get(key string) (bool, string, error) {
 func (cs *CacheService) Set(key string, value interface{}) {
 	cs.redisClient.Set(key, value, 0)
 }
+
+func (cs *CacheService) Remove(key string) {
+	cs.redisClient.Del(key)
+}

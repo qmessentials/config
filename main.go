@@ -40,8 +40,7 @@ func main() {
 
 	redis := redis.NewClient(&redis.Options{Addr: os.Getenv("REDIS_ADDRESS"), Password: "", DB: 0}) //default DB
 	cacheService := utilities.NewCacheService(redis)
-	authClient := utilities.NewAuthClient(os.Getenv("AUTH_SERVICE_ENDPOINT"), os.Getenv("AUTH_SERVICE_USER_ID"),
-		os.Getenv("AUTH_SERVICE_PASSWORD"))
+	authClient := utilities.NewAuthClient(os.Getenv("AUTH_SERVICE_ENDPOINT"))
 	permissionsHelper := utilities.NewPermissionHelper(authClient, cacheService)
 
 	routers.RegisterProducts(r.Group("/products"), db, permissionsHelper)
