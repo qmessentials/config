@@ -33,9 +33,25 @@ func main() {
 		os.Getenv("PGUSER"), os.Getenv("PGPASSWORD"), os.Getenv("PGDATABASE"), os.Getenv("PGPORT"))
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	db.AutoMigrate(&models.Product{})
 	if err != nil {
 		log.Error().Err(err).Msg("Error connecting to database")
+		panic("unable to connect to database")
+	}
+	if err = db.AutoMigrate(&models.Product{}); err != nil {
+		log.Error().Err(err).Msg("Error automigrating model Product")
+	}
+	if err = db.AutoMigrate(&models.Test{}); err != nil {
+		log.Error().Err(err).Msg("Error automigrating model Test")
+	}
+	if err = db.AutoMigrate(&models.Unit{}); err != nil {
+		log.Error().Err(err).Msg("Error automigrating model Unit")
+	}
+	if err = db.AutoMigrate(&models.ConfigSetting{}); err != nil {
+		log.Error().Err(err).Msg("Error automigrating model ConfigSetting")
+	}
+	if err = utilities.BootstrapConfig(db); err != nil {
+		log.Error().Err(err).Msgf("Error bootstrapping config data")
+		panic("database isn't bootstrapped")
 	}
 
 	redis := redis.NewClient(&redis.Options{Addr: os.Getenv("REDIS_ADDRESS"), Password: "", DB: 0}) //default DB
@@ -44,6 +60,8 @@ func main() {
 	permissionsHelper := utilities.NewPermissionHelper(authClient, cacheService)
 
 	routers.RegisterProducts(r.Group("/products"), db, permissionsHelper)
+	routers.RegisterTests(r.Group("/tests"), db, permissionsHelper)
+	routers.RegisterUnits(r.Group("/units"), db)
 
 	r.Run(fmt.Sprintf(":%s", os.Getenv("PORT")))
 }

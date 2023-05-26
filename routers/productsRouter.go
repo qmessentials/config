@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 func checkPermissions(c *gin.Context, permission string, permissionsHelper *utilities.PermissionsHelper) int {
 	authHeader := c.Request.Header.Get("Authorization")
 	log.Info().Msgf("Auth header is %s", authHeader)
@@ -36,8 +35,8 @@ func checkPermissions(c *gin.Context, permission string, permissionsHelper *util
 	return http.StatusOK
 }
 
-func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper *utilities.PermissionsHelper) {
-	products.GET("/:productCode", func(c *gin.Context) {
+func RegisterProducts(productsGroup *gin.RouterGroup, db *gorm.DB, permissionsHelper *utilities.PermissionsHelper) {
+	productsGroup.GET("/:productCode", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "product-view", permissionsHelper)
 		if permissionsResult != http.StatusOK {
 			c.AbortWithStatus(permissionsResult)
@@ -56,7 +55,7 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		}
 		c.JSON(http.StatusOK, product)
 	})
-	products.GET("/", func(c *gin.Context) {
+	productsGroup.GET("/", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "product-search", permissionsHelper)
 		if permissionsResult != http.StatusOK {
 			c.AbortWithStatus(permissionsResult)
@@ -71,15 +70,14 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		}
 		c.JSON(http.StatusOK, products)
 	})
-	products.POST("/", func(c *gin.Context) {
+	productsGroup.POST("/", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "product-create", permissionsHelper)
 		if permissionsResult != http.StatusOK {
 			c.AbortWithStatus(permissionsResult)
 			return
 		}
 		var product models.Product
-		err := c.BindJSON(&product)
-		if err != nil {
+		if err := c.BindJSON(&product); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
@@ -96,15 +94,14 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		}
 		c.Status(http.StatusCreated)
 	})
-	products.PUT("/:productCode", func(c *gin.Context) {
+	productsGroup.PUT("/:productCode", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "product-edit", permissionsHelper)
 		if permissionsResult != http.StatusOK {
 			c.AbortWithStatus(permissionsResult)
 			return
 		}
 		var product models.Product
-		err := c.BindJSON(&product)
-		if err != nil {
+		if err := c.BindJSON(&product); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
@@ -125,7 +122,7 @@ func RegisterProducts(products *gin.RouterGroup, db *gorm.DB, permissionsHelper 
 		}
 		c.Status(http.StatusOK)
 	})
-	products.DELETE("/:productCode", func(c *gin.Context) {
+	productsGroup.DELETE("/:productCode", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "product-remove", permissionsHelper)
 		if permissionsResult != http.StatusOK {
 			c.AbortWithStatus(permissionsResult)
