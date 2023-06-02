@@ -1,20 +1,20 @@
 package main
 
 import (
-	"config/models"
+	"config/repositories"
 	"config/routers"
 	"config/utilities"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog/pkgerrors"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -32,26 +32,34 @@ func main() {
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=America/New_York", os.Getenv("PGHOST"),
 		os.Getenv("PGUSER"), os.Getenv("PGPASSWORD"), os.Getenv("PGDATABASE"), os.Getenv("PGPORT"))
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
-		log.Error().Err(err).Msg("Error connecting to database")
-		panic("unable to connect to database")
+		log.Error().Err(err).Msg("unable to connect to database")
+		panic(err)
 	}
-	if err = db.AutoMigrate(&models.Product{}); err != nil {
-		log.Error().Err(err).Msg("Error automigrating model Product")
+	defer conn.Close(context.Background())
+	tableVersionsRepository := repositories.NewTableVersionsRepository(conn)
+	if err = tableVersionsRepository.Migrate(); err != nil {
+		panic(err)
 	}
-	if err = db.AutoMigrate(&models.Test{}); err != nil {
-		log.Error().Err(err).Msg("Error automigrating model Test")
+	configSettingsRepository := repositories.NewConfigSettingsRepository(conn)
+	if err = configSettingsRepository.Migrate(); err != nil {
+		panic(err)
 	}
-	if err = db.AutoMigrate(&models.Unit{}); err != nil {
-		log.Error().Err(err).Msg("Error automigrating model Unit")
+	unitsRepository := repositories.NewUnitsRepository(conn)
+	if err = unitsRepository.Migrate(); err != nil {
+		panic(err)
 	}
-	if err = db.AutoMigrate(&models.ConfigSetting{}); err != nil {
-		log.Error().Err(err).Msg("Error automigrating model ConfigSetting")
+	productsRepository := repositories.NewProductsRepository(conn)
+	if err = productsRepository.Migrate(); err != nil {
+		panic(err)
 	}
-	if err = utilities.BootstrapConfig(db); err != nil {
-		log.Error().Err(err).Msgf("Error bootstrapping config data")
-		panic("database isn't bootstrapped")
+	testsRepository := repositories.NewTestsRepository(conn)
+	if err = testsRepository.Migrate(); err != nil {
+		panic(err)
+	}
+	if err = utilities.BootstrapConfig(configSettingsRepository, unitsRepository); err != nil {
+		panic(err)
 	}
 
 	redis := redis.NewClient(&redis.Options{Addr: os.Getenv("REDIS_ADDRESS"), Password: "", DB: 0}) //default DB
@@ -59,9 +67,9 @@ func main() {
 	authClient := utilities.NewAuthClient(os.Getenv("AUTH_SERVICE_ENDPOINT"))
 	permissionsHelper := utilities.NewPermissionHelper(authClient, cacheService)
 
-	routers.RegisterProducts(r.Group("/products"), db, permissionsHelper)
-	routers.RegisterTests(r.Group("/tests"), db, permissionsHelper)
-	routers.RegisterUnits(r.Group("/units"), db)
+	routers.RegisterProducts(r.Group("/products"), productsRepository, permissionsHelper)
+	routers.RegisterTests(r.Group("/tests"), testsRepository, permissionsHelper)
+	routers.RegisterUnits(r.Group("/units"), unitsRepository, permissionsHelper)
 
 	r.Run(fmt.Sprintf(":%s", os.Getenv("PORT")))
 }

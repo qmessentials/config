@@ -2,25 +2,22 @@ package utilities
 
 import (
 	"config/models"
+	"config/repositories"
+	"context"
 
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
-func BootstrapConfig(db *gorm.DB) error {
-	var bootstrapped bool
-	temp := db.Raw(`select "values"[1]::boolean as is_bootstrapped from config_settings where name = 'IsBootstrapped'`)
-	if temp.Error != nil {
-		return temp.Error
-	}
-	if err := temp.Scan(&bootstrapped).Error; err != nil {
+func BootstrapConfig(config *repositories.ConfigSettingsRepository, units *repositories.UnitsRepository) error {
+	bootstrapped, err := config.GetOneFlag("IsBootstrapped")
+	if err != nil {
 		return err
 	}
 	if bootstrapped {
 		return nil
 	}
 	log.Warn().Msg("Bootstrapping config info")
-	units := []models.Unit{
+	defaultUnits := []models.Unit{
 		{FullName: "inch", FullNamePlural: "inches", Abbreviation: "in", MeasurementSystem: "US", UnitType: "linear"},
 		{FullName: "foot", FullNamePlural: "feet", Abbreviation: "ft", MeasurementSystem: "US", UnitType: "linear"},
 		{FullName: "yard", FullNamePlural: "yards", Abbreviation: "yd", MeasurementSystem: "US", UnitType: "linear"},
@@ -78,25 +75,36 @@ func BootstrapConfig(db *gorm.DB) error {
 		{FullName: "day", FullNamePlural: "days", Abbreviation: "day", MeasurementSystem: "none", UnitType: "time"},
 	}
 
-	err := db.Transaction(func(tx *gorm.DB) error {
-		//Apparently there's a bug with how GORM handles array inserts in Postgresql
-		if err := tx.Exec("INSERT INTO config_settings (name,values) VALUES ('IsBootstrapped',ARRAY['true'])").Error; err != nil {
-			return err
-		}
-		if err := tx.Exec("INSERT INTO config_settings (name,values) VALUES ('Modifiers',ARRAY['top','bottom','left','right','middle','upper','lower','center','inside','outside','warp','fill'])").Error; err != nil {
-			return err
-		}
-		if err := tx.Exec("INSERT INTO config_settings (name,values) VALUES ('MeasurementSystems',ARRAY['metric','US','none'])").Error; err != nil {
-			return err
-		}
-		if err := tx.Exec("INSERT INTO config_settings (name,values) VALUES ('UnitTypes',ARRAY['linear','area','volume','weight','mass','velocity','acceleration','pressure','time'])").Error; err != nil {
-			return err
-		}
-		if err := db.Create(&units).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-	return err
+	tx, err := config.GetUnderlyingConnection().Begin(context.Background())
+	if err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
 
+	if err := config.Upsert("IsBootstrapped", []string{"true"}, tx); err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
+	if err := config.Upsert("Modifiers", []string{"top", "bottom", "left", "right", "middle", "upper", "lower", "center", "inside", "outside", "warp", "fill"}, tx); err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
+	if err := config.Upsert("MeasurementSystems", []string{"metric", "US", "none"}, tx); err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
+	if err := config.Upsert("UnitTypes", []string{"linear", "area", "volume", "weight", "mass", "velocity", "acceleration", "pressure", "time"}, tx); err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
+	if err := units.InsertMany(&defaultUnits, "auto", tx); err != nil {
+		tx.Rollback(context.Background())
+		return err
+	}
+
+	if err = tx.Commit(context.Background()); err != nil {
+		return err
+	}
+
+	return nil
 }

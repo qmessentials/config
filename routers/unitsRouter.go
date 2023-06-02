@@ -1,22 +1,24 @@
 package routers
 
 import (
-	"config/models"
+	"config/repositories"
+	"config/utilities"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
-func RegisterUnits(unitsGroup *gin.RouterGroup, db *gorm.DB) {
+func RegisterUnits(unitsGroup *gin.RouterGroup, repo *repositories.UnitsRepository, permissionsHelper *utilities.PermissionsHelper) {
 	unitsGroup.GET("/", func(c *gin.Context) {
-		var units []models.Unit
-		result := db.Find(&units)
-		if result.Error != nil {
-			log.Error().Err(result.Error).Msg("Error retrieving products")
-			c.AbortWithStatus(http.StatusInternalServerError)
+		permissionsResult := checkPermissions(c, "unit-search", permissionsHelper)
+		if permissionsResult != http.StatusOK {
+			c.AbortWithStatus(permissionsResult)
 			return
+		}
+		units, err := repo.GetMany()
+		if err != nil {
+			log.Error().Err(err).Msg("error retrieving units")
 		}
 		c.JSON(http.StatusOK, units)
 	})
