@@ -5,6 +5,7 @@ import (
 	"config/repositories"
 	"config/utilities"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,17 @@ func RegisterTests(testsGroup *gin.RouterGroup, testsRepo *repositories.TestsRep
 			c.AbortWithStatus(permissionsResult)
 			return
 		}
-		tests, err := testsRepo.GetMany()
+		pageSizeString := c.Query("pageSize")
+		lastKeyString := c.Query("lastKey")
+		pageSize, err := strconv.Atoi(pageSizeString)
+		if err != nil {
+			log.Error().Err(err).Msgf("Unable to parse pageSize value of '%v' as int", pageSizeString)
+		}
+		var lastKey *string
+		if lastKeyString != "" {
+			lastKey = &lastKeyString
+		}
+		tests, err := testsRepo.GetMany(pageSize, lastKey)
 		if err != nil {
 			log.Error().Err(err).Msg("error retrieving tests")
 			c.AbortWithStatus(http.StatusInternalServerError)

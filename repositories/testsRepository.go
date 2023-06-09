@@ -25,9 +25,15 @@ func (repo *TestsRepository) GetOne(testName string) (*models.Test, error) {
 	return &test, nil
 }
 
-func (repo *TestsRepository) GetMany() (*[]models.Test, error) {
-	sql := `select test_name, unit_type, "references", standards, available_modifiers from tests`
-	rows, err := repo.conn.Query(context.Background(), sql)
+func (repo *TestsRepository) GetMany(pageSize int, lastKey *string) (*[]models.Test, error) {
+	sql := `
+select test_name, unit_type, "references", standards, available_modifiers 
+from tests
+where $2::text is null or test_name > $2::text
+order by test_name
+limit $1
+	`
+	rows, err := repo.conn.Query(context.Background(), sql, pageSize, lastKey)
 	if err != nil {
 		return nil, err
 	}
