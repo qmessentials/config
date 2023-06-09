@@ -40,6 +40,15 @@ func RegisterTests(testsGroup *gin.RouterGroup, testsRepo *repositories.TestsRep
 		}
 		pageSizeString := c.Query("pageSize")
 		lastKeyString := c.Query("lastKey")
+		namePattern := c.Query("namePattern")
+		unitTypeValues := c.QueryArray("unitType")
+		var criteria models.TestCriteria
+		if len(namePattern) > 0 {
+			criteria.NamePattern = &namePattern
+		}
+		if len(unitTypeValues) > 0 {
+			criteria.UnitTypeValues = &unitTypeValues
+		}
 		pageSize, err := strconv.Atoi(pageSizeString)
 		if err != nil {
 			log.Error().Err(err).Msgf("Unable to parse pageSize value of '%v' as int", pageSizeString)
@@ -48,7 +57,7 @@ func RegisterTests(testsGroup *gin.RouterGroup, testsRepo *repositories.TestsRep
 		if lastKeyString != "" {
 			lastKey = &lastKeyString
 		}
-		tests, err := testsRepo.GetMany(pageSize, lastKey)
+		tests, err := testsRepo.GetMany(pageSize, lastKey, &criteria)
 		if err != nil {
 			log.Error().Err(err).Msg("error retrieving tests")
 			c.AbortWithStatus(http.StatusInternalServerError)
