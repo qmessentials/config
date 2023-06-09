@@ -32,6 +32,10 @@ func (repo *ProductsRepository) GetMany() (*[]models.Product, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
 	for rows.Next() {
 		var product models.Product
 		if err := rows.Scan(&product.ProductCode, &product.Description); err != nil {

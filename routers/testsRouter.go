@@ -40,21 +40,38 @@ func RegisterTests(testsGroup *gin.RouterGroup, testsRepo *repositories.TestsRep
 		}
 		pageSizeString := c.Query("pageSize")
 		lastKeyString := c.Query("lastKey")
+		namePattern := c.Query("namePattern")
+		unitTypeValues := c.QueryArray("unitType")
+		var criteria models.TestCriteria
+		if len(namePattern) > 0 {
+			criteria.NamePattern = &namePattern
+		}
+		if len(unitTypeValues) > 0 {
+			criteria.UnitTypeValues = &unitTypeValues
+		}
 		pageSize, err := strconv.Atoi(pageSizeString)
 		if err != nil {
 			log.Error().Err(err).Msgf("Unable to parse pageSize value of '%v' as int", pageSizeString)
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
 		}
 		var lastKey *string
 		if lastKeyString != "" {
 			lastKey = &lastKeyString
 		}
-		tests, err := testsRepo.GetMany(pageSize, lastKey)
+		tests, err := testsRepo.GetMany(pageSize, lastKey, &criteria)
 		if err != nil {
 			log.Error().Err(err).Msg("error retrieving tests")
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		c.JSON(http.StatusOK, tests)
+		if tests == nil {
+			log.Error().Msg("tests repo returned nil result but no error")
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		log.Info().Msgf("%v tests found", len(*tests))
+		c.JSON(http.StatusOK, *tests)
 	})
 	testsGroup.POST("/", func(c *gin.Context) {
 		permissionsResult := checkPermissions(c, "test-create", permissionsHelper)
