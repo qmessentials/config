@@ -25,15 +25,23 @@ func (repo *TestsRepository) GetOne(testName string) (*models.Test, error) {
 	return &test, nil
 }
 
-func (repo *TestsRepository) GetMany(pageSize int, lastKey *string) (*[]models.Test, error) {
+func (repo *TestsRepository) GetMany(pageSize int, lastKey *string, criteria *models.TestCriteria) (*[]models.Test, error) {
 	sql := `
-select test_name, unit_type, "references", standards, available_modifiers 
-from tests
-where $2::text is null or test_name > $2::text
-order by test_name
-limit $1
+ SELECT test_name, unit_type, "references", standards, available_modifiers
+ FROM tests
+ WHERE ($2::text is null or test_name > $2::text)
+    AND ($3::text is null or test_name like $3::text)
+    AND ($4::text is null or unit_type = any($4::text[]))
+ ORDER BY test_name
+ LIMIT $1;
 	`
-	rows, err := repo.conn.Query(context.Background(), sql, pageSize, lastKey)
+	var arrayParam []string
+	if criteria.UnitTypeValues != nil {
+		arrayParam = *criteria.UnitTypeValues
+	} else {
+		arrayParam = []string{}
+	}
+	rows, err := repo.conn.Query(context.Background(), sql, pageSize, lastKey, criteria.NamePattern, arrayParam)
 	if err != nil {
 		return nil, err
 	}
